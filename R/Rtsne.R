@@ -35,6 +35,7 @@
 #' @param final_momentum numeric; Momentum used in the final part of the optimization (default: 0.8)
 #' @param eta numeric; Learning rate (default: 200.0)
 #' @param exaggeration_factor numeric; Exaggeration factor used to multiply the P matrix in the first part of the optimization (default: 12.0)
+#' @param fix logical vector; Indicating which Y_init values to fix. User must define Y_init and set theta = 0 (default: NULL)
 #' 
 #' @return List with the following elements:
 #' \item{Y}{Matrix containing the new representations for the objects}
@@ -70,9 +71,21 @@
 #' # Use a given initialization of the locations of the points
 #' tsne_part1 <- Rtsne(iris_unique[,1:4], theta=0.0, pca=FALSE,max_iter=350)
 #' tsne_part2 <- Rtsne(iris_unique[,1:4], theta=0.0, pca=FALSE, max_iter=150,Y_init=tsne_part1$Y)
+#'
+#' # Now see how new points are placed fixing the originals in place
+#' av <- aggregate(iris_matrix, by = list(species=iris_unique$Species), FUN = mean)
+#' f <- c(rep(TRUE, nrow(iris_matrix)), rep(FALSE, 3))
+#' yin <- rbind(tsne_part1$Y, matrix(rep(0,6), nrow = 3))
+#' x <- rbind(iris_matrix, av[,2:5])
+#' y <- Rtsne(x, theta = 0.0, pca = FALSE, Y_init = yin, fix = f)
+#' plot(y$Y, col = c(iris_unique$Species, 3, 1, 2))
+#' na <- nrow(y$Y)
+#' nn <- na - nrow(av) + 1
+#' points(y$Y[nn:na,], col = 1:3, pch = 20)
+#' 
 #' @useDynLib Rtsne, .registration = TRUE
 #' @import Rcpp
-#' @importFrom stats model.matrix prcomp
+#' @importFrom stats model.matrix prcomp na.fail
 #' 
 #' @export
 Rtsne <- function (X, ...) {
@@ -90,7 +103,7 @@ Rtsne.default <- function(X, dims=2, initial_dims=50,
                           stop_lying_iter=ifelse(is.null(Y_init),250L,0L), 
                           mom_switch_iter=ifelse(is.null(Y_init),250L,0L), 
                           momentum=0.5, final_momentum=0.8,
-                          eta=200.0, exaggeration_factor=12.0, ...) {
+                          eta=200.0, exaggeration_factor=12.0, fix = NULL, ...) {
   
   is.wholenumber <- function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
   
@@ -106,8 +119,10 @@ Rtsne.default <- function(X, dims=2, initial_dims=50,
   if (!is.wholenumber(mom_switch_iter) || mom_switch_iter<0) { stop("mom_switch_iter should be a positive integer")}
   if (!is.numeric(exaggeration_factor)) { stop("exaggeration_factor should be numeric")}
   if (!is.wholenumber(initial_dims) || initial_dims<=0) { stop("Incorrect initial dimensionality.")}
-  
-  
+  if (!is.null(fix) && is.null(Y_init)) stop("Cannot fix co-ordinates when no Y_init is given.")
+  if (!is.null(fix) && theta != 0) stop("Use theta=0 when fixing positions.")
+  if (!is.null(fix) && length(fix) != nrow(Y_init)) stop("Length of fix must equal nrow(Y_init)")
+    
   # Check for missing values
   X <- na.fail(X)
   
@@ -123,7 +138,9 @@ Rtsne.default <- function(X, dims=2, initial_dims=50,
   if (is_distance & theta==0.0) {
     X <- X^2
   }
-  
+
+  if (is.null(fix)) fix <- rep(FALSE, nrow(X))
+
   if (is.null(Y_init)) {
     init <- FALSE
     Y_init <- matrix()
@@ -132,7 +149,8 @@ Rtsne.default <- function(X, dims=2, initial_dims=50,
   }
   
   Rtsne_cpp(X, dims, perplexity, theta,verbose, max_iter, is_distance, Y_init, init,
-            stop_lying_iter, mom_switch_iter, momentum, final_momentum, eta, exaggeration_factor)
+            stop_lying_iter, mom_switch_iter, momentum, final_momentum, eta, exaggeration_factor,
+            fix)
 }
 
 #' @describeIn Rtsne tsne on given dist object

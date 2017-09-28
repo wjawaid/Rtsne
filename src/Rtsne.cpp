@@ -9,7 +9,8 @@ Rcpp::List Rtsne_cpp(NumericMatrix X, int no_dims_in, double perplexity_in,
                      bool distance_precomputed, NumericMatrix Y_in, bool init, 
                      int stop_lying_iter_in, int mom_switch_iter_in,
                      double momentum_in, double final_momentum_in, 
-                     double eta_in, double exaggeration_factor_in) {
+                     double eta_in, double exaggeration_factor_in,
+		     LogicalVector fix_in) {
 
   long origN, N, D, no_dims = no_dims_in;
 
@@ -22,7 +23,7 @@ Rcpp::List Rtsne_cpp(NumericMatrix X, int no_dims_in, double perplexity_in,
   double momentum = momentum_in;
   double final_momentum = final_momentum_in;
   double eta = eta_in;
-  double exaggeration_factor = exaggeration_factor_in;
+  double exaggeration_factor = exaggeration_factor_in; 
   
   origN = X.nrow();
   D = X.ncol();
@@ -46,12 +47,16 @@ Rcpp::List Rtsne_cpp(NumericMatrix X, int no_dims_in, double perplexity_in,
 	double* costs = (double*) calloc(N, sizeof(double));
 	double* itercosts = (double*) calloc((int)(ceil(max_iter/50.0)), sizeof(double));
   if(Y == NULL || costs == NULL) { Rcpp::stop("Memory allocation failed!\n"); }
-  
+
+  bool* fix = (bool*) malloc(N * sizeof(bool));
+  if(fix == NULL) {Rcpp::stop("Memoy allocation failes!!\n");}
+  for(int i = 0; i < N; i++) fix[i] = fix_in[i];
+
   // Initialize solution (randomly)
   if (init) {
     for (int i = 0; i < N; i++){
       for (int j = 0; j < no_dims; j++){
-        Y[i*no_dims+j] = Y_in(i,j);
+        Y[i*no_dims+j] = Y_in(i,j); // Row major storage
       }
     }
     if (verbose) Rprintf("Using user supplied starting positions\n");
@@ -59,7 +64,7 @@ Rcpp::List Rtsne_cpp(NumericMatrix X, int no_dims_in, double perplexity_in,
   
   // Run tsne
 	tsne->run(data, N, D, Y, no_dims, perplexity, theta, verbose, max_iter, costs, distance_precomputed, 
-          itercosts, init, stop_lying_iter, mom_switch_iter, momentum, final_momentum, eta, exaggeration_factor);
+		  itercosts, init, stop_lying_iter, mom_switch_iter, momentum, final_momentum, eta, exaggeration_factor, fix);
 
 	// Save the results
   Rcpp::NumericMatrix Yr(N, no_dims);

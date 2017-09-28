@@ -56,7 +56,7 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims,
                double perplexity, double theta, bool verbose, int max_iter, double* cost, 
                bool distance_precomputed, double* itercost, bool init, 
                int stop_lying_iter, int mom_switch_iter, double momentum, double final_momentum, 
-               double eta, double exaggeration_factor) {
+               double eta, double exaggeration_factor, bool* fix) {
     
     // Determine whether we are using an exact algorithm
     if(N - 1 < 3 * perplexity) { Rcpp::stop("Perplexity too large for the number of data points!\n"); }
@@ -74,11 +74,19 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims,
     if(dY == NULL || uY == NULL || gains == NULL) { Rcpp::stop("Memory allocation failed!\n"); }
     for(int i = 0; i < N * no_dims; i++)    uY[i] =  .0;
     for(int i = 0; i < N * no_dims; i++) gains[i] = 1.0;
-    
+
+    bool anyfix = false;
+    for(int i = 0; i < N; i++) {
+      if(fix[i]) {
+	anyfix = true;
+	break;
+      }
+    }
+
     // Normalize input data (to prevent numerical problems)
     if (verbose) Rprintf("Computing input similarities...\n");
     start = clock();
-    if (!distance_precomputed) {
+    if (!distance_precomputed & !anyfix) {
       if (verbose) Rprintf("Normalizing input...\n");
       zeroMean(X, N, D);
       double max_X = .0;
@@ -152,7 +160,16 @@ void TSNE::run(double* X, int N, int D, double* Y, int no_dims,
         // Compute (approximate) gradient
         if(exact) computeExactGradient(P, Y, N, no_dims, dY);
         else computeGradient(P, row_P, col_P, val_P, Y, N, no_dims, dY, theta);
-        
+
+	// Zero gradients of fixed points
+	for(int i = 0; i < N; i++) {
+	  if(fix[i]) {
+	    for(int j = 0; j < no_dims; j++){
+	      dY[i * no_dims + j] = 0;
+	    }
+	  }
+	}
+	
         // Update gains
         for(int i = 0; i < N * no_dims; i++) gains[i] = (sign_tsne(dY[i]) != sign_tsne(uY[i])) ? (gains[i] + .2) : (gains[i] * .8);
         for(int i = 0; i < N * no_dims; i++) if(gains[i] < .01) gains[i] = .01;
