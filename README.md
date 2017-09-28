@@ -10,6 +10,11 @@
 R wrapper for Van der Maaten's Barnes-Hut implementation of t-Distributed Stochastic Neighbor Embedding
 =======================================================================================================
 
+Note
+----
+
+This is forked from [Jesse Krijthe](https://github.com/jkrijthe/Rtsne).
+
 Installation
 ------------
 
