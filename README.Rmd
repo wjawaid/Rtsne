@@ -13,24 +13,20 @@ knitr::opts_chunk$set(
   fig.path = "README-"
 )
 ```
-[![CRAN version](http://www.r-pkg.org/badges/version/Rtsne)](https://cran.r-project.org/package=Rtsne/)
-[![Travis-CI Build Status](https://travis-ci.org/jkrijthe/Rtsne.png?branch=master)](https://travis-ci.org/jkrijthe/Rtsne)
-[![codecov.io](https://codecov.io/github/jkrijthe/Rtsne/coverage.svg?branch=master)](https://codecov.io/github/jkrijthe/Rtsne?branch=master)
-[![CRAN mirror downloads](http://cranlogs.r-pkg.org/badges/Rtsne)](https://cran.r-project.org/package=Rtsne/)
+<!-- [![CRAN version](http://www.r-pkg.org/badges/version/Rtsne)](https://cran.r-project.org/package=Rtsne/) -->
+<!-- [![Travis-CI Build Status](https://travis-ci.org/jkrijthe/Rtsne.png?branch=master)](https://travis-ci.org/jkrijthe/Rtsne) -->
+<!-- [![codecov.io](https://codecov.io/github/jkrijthe/Rtsne/coverage.svg?branch=master)](https://codecov.io/github/jkrijthe/Rtsne?branch=master) -->
+<!-- [![CRAN mirror downloads](http://cranlogs.r-pkg.org/badges/Rtsne)](https://cran.r-project.org/package=Rtsne/) -->
 
 
 # R wrapper for Van der Maaten's Barnes-Hut implementation of t-Distributed Stochastic Neighbor Embedding 
 
 ##Installation
 
-To install from CRAN:
-```{r, eval = FALSE}
-install.packages("Rtsne") # Install Rtsne package from CRAN
-```
 To install the latest version from the github repository, use:
 ```{r, eval = FALSE}
 if(!require(devtools)) install.packages("devtools") # If not already installed
-devtools::install_github("jkrijthe/Rtsne")
+devtools::install_github("wjawaid/Rtsne")
 ```
 
 
@@ -61,7 +57,7 @@ x <- rbind(iris_matrix, av[,2:5])
 f <- c(rep(TRUE, nrow(iris_matrix)), rep(FALSE, 3))
 yin <- rbind(tsne_part2$Y, matrix(rep(0,6), nrow = 3))
 y <- Rtsne(x, theta = 0.0, pca = FALSE, Y_init = yin, fix = f)
-plot(y$Y, col = c(iris_unique$Species, 3, 1, 2))
+plot(y$Y, col = c(iris_unique$Species, 3, 1, 2)) # Mix the outline colour
 na <- nrow(y$Y)
 nn <- na - nrow(av) + 1
 points(y$Y[nn:na,], col = 1:3, pch = 20)
