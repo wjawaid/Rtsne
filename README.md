@@ -35,7 +35,9 @@ tsne_out <- Rtsne(as.matrix(iris_unique[,1:4])) # Run TSNE
 plot(tsne_out$Y,col=iris_unique$Species) # Plot the result
 ```
 
-![](tools/example-1.png) You can do 350 iterations ahve a look and then do another 150:
+![](tools/example-1.png)
+
+You can do 350 iterations have a look and then do another 150:
 
 ``` {.r}
 tsne_part1 <- Rtsne(iris_unique[,1:4], theta = 0.0, pca = FALSE, max_iter = 350)
@@ -49,7 +51,9 @@ tsne_part2 <- Rtsne(iris_unique[,1:4], theta = 0.0, pca = FALSE, max_iter = 150,
 plot(tsne_part2$Y, col = iris_unique$Species)
 ```
 
-![](tools/dynamic2-1.png) You can add new data points to an existing tSNE. For example you can add where the average of each species lies:
+![](tools/dynamic2-1.png)
+
+You can add new data points to an existing tSNE. For example you can add where the average of each species lies. The filled points show the averages.
 
 ``` {.r}
 av <- aggregate(iris_matrix, by = list(species=iris_unique$Species), FUN = mean)
@@ -63,7 +67,7 @@ nn <- na - nrow(av) + 1
 points(y$Y[nn:na,], col = 1:3, pch = 20)
 ```
 
-![](tools/project-1.png) The filled points show the averages.
+![](tools/project-1.png)
 
 Details
 =======
