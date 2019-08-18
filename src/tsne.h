@@ -31,6 +31,7 @@
  */
 
 #include "datapoint.h"
+#include <vector>
 
 #ifndef TSNE_H
 #define TSNE_H
@@ -42,27 +43,43 @@ template <int NDims>
 class TSNE
 {    
 public:
-    void run(double* X, int N, int D, double* Y, int no_dims, double perplexity, 
-             double theta, bool verbose, int max_iter, double* costs, 
-             bool distance_precomputed, double* itercost, bool init, int stop_lying_iter,
-	     int mom_switch_iter, double momentum, double final_momentum, double eta,
-	     double exaggeration_factor,int num_threads, bool* fix);
-    void symmetrizeMatrix(unsigned int** row_P, unsigned int** col_P, double** val_P, int N); // should be static?!
+    TSNE(double perplexity, double theta, bool verbose, int max_iter, bool init, int stop_lying_iter, 
+	 int mom_switch_iter, double momentum, double final_momentum, double eta, double exaggeration_factor,int num_threads, bool* fix);
 
-    
+  void run(double* X, unsigned int N, int D, double* Y, bool distance_precomputed, double* cost, double* itercost, bool* fix);
+  void run(const int* nn_index, const double* nn_dist, unsigned int N, int K, double* Y, double* cost, double* itercost, bool* fix);
+
 private:
-    void computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp_col_P, double* inp_val_P, double* Y, int N, int D, double* dC, double theta);
-    void computeExactGradient(double* P, double* Y, int N, int D, double* dC);
-    double evaluateError(double* P, double* Y, int N, int D);
-    double evaluateError(unsigned int* row_P, unsigned int* col_P, double* val_P, double* Y, int N, int D, double theta);
-    void getCost(double* P, double* Y, int N, int D, double* costs);
-    void getCost(unsigned int* row_P, unsigned int* col_P, double* val_P, double* Y, int N, int D, double theta, double* costs);
-    void zeroMean(double* X, int N, int D);
-    void computeGaussianPerplexity(double* X, int N, int D, double* P, double perplexity, bool distance_precomputed);
+    void symmetrizeMatrix(unsigned int N); 
+    void trainIterations(unsigned int N, double* Y, double* cost, double* itercost);
+
+    void computeGradient(double* P, unsigned int* inp_row_P, unsigned int* inp_col_P, double* inp_val_P, double* Y, unsigned int N, int D, double* dC, double theta);
+    void computeExactGradient(double* P, double* Y, unsigned int N, int D, double* dC);
+    double evaluateError(double* P, double* Y, unsigned int N, int D);
+    double evaluateError(unsigned int* row_P, unsigned int* col_P, double* val_P, double* Y, unsigned int N, int D, double theta);
+    void getCost(double* P, double* Y, unsigned int N, int D, double* costs);
+    void getCost(unsigned int* row_P, unsigned int* col_P, double* val_P, double* Y, unsigned int N, int D, double theta, double* costs);
+    void zeroMean(double* X, unsigned int N, int D);
+
+    void computeGaussianPerplexity(double* X, unsigned int N, int D, bool distance_precomputed);
     template<double (*distance)( const DataPoint&, const DataPoint& )>
-    void computeGaussianPerplexity(double* X, int N, int D, unsigned int** _row_P, unsigned int** _col_P, double** _val_P, double perplexity, int K, bool verbose);
-    void computeSquaredEuclideanDistance(double* X, int N, int D, double* DD);
+    void computeGaussianPerplexity(double* X, unsigned int N, int D, int K);
+    void computeGaussianPerplexity(const int* nn_dex, const double* nn_dist, unsigned int N, int K);
+    void setupApproximateMemory(unsigned int N, int K);
+
+    void computeProbabilities(const double perplexity, const int K, const double* distances, double* cur_P);
+    void computeSquaredEuclideanDistance(double* X, unsigned  int N, int D, double* DD);
+    void computeSquaredEuclideanDistanceDirect(double* X, unsigned int N, int D, double* DD);
+    
     double randn();
+
+    // Member variables.
+    double perplexity, theta, momentum, final_momentum, eta, exaggeration_factor;
+    int max_iter, stop_lying_iter, mom_switch_iter, num_threads;
+    bool verbose, init, exact;
+
+    std::vector<unsigned int> row_P, col_P;
+    std::vector<double> val_P, P;
 };
 
 #endif

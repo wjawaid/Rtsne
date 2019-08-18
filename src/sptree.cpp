@@ -115,9 +115,6 @@ SPTree<NDims>::SPTree(double* inp_data, unsigned int N)
   }
   
   for(int d = 0; d < NDims; d++) mean_Y[d] /= (double) N;
-  // double sum_m = 0.0;
-  // for(int d = 0; d < NDims; d++) sum_m+=mean_Y[d];
-  // Rprintf("mean: %4.25f\n",sum_m);
   
   // Construct SPTree
   double* width = (double*) malloc(NDims * sizeof(double));
@@ -399,11 +396,11 @@ double SPTree<NDims>::computeNonEdgeForces(unsigned int point_index, double thet
 
 // Computes edge forces
 template<int NDims>
-void SPTree<NDims>::computeEdgeForces(unsigned int* row_P, unsigned int* col_P, double* val_P, int N, double* pos_f) const
+void SPTree<NDims>::computeEdgeForces(unsigned int* row_P, unsigned int* col_P, double* val_P, unsigned int N, double* pos_f, int num_threads) const
 {
   
   // Loop over all edges in the graph
-  #pragma omp parallel for schedule(static)
+  #pragma omp parallel for schedule(static) num_threads(num_threads)
   for(unsigned int n = 0; n < N; n++) {
     unsigned int ind1 = n * NDims;
     for(unsigned int i = row_P[n]; i < row_P[n + 1]; i++) {
@@ -420,7 +417,6 @@ void SPTree<NDims>::computeEdgeForces(unsigned int* row_P, unsigned int* col_P, 
       }
       
       sqdist = val_P[i] / sqdist;
-      //Rprintf("it%d: %4.25f\n",n,sqdist);
       
       // Sum positive force
       for(unsigned int d = 0; d < NDims; d++) pos_f[ind1 + d] += sqdist * buff[d];
@@ -440,7 +436,7 @@ void SPTree<NDims>::print()
 
   if(is_leaf) {
     Rprintf("Leaf node; data = [");
-    for(int i = 0; i < size; i++) {
+    for(unsigned int i = 0; i < size; i++) {
       double* point = data + index[i] * NDims;
       for(int d = 0; d < NDims; d++) Rprintf("%f, ", point[d]);
       Rprintf(" (index = %d)", index[i]);

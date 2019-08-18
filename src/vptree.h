@@ -49,14 +49,12 @@
 double euclidean_distance(const DataPoint &t1, const DataPoint &t2) {
   double dd = .0;
   for(int d = 0; d < t1.dimensionality(); d++) dd += (t1.x(d) - t2.x(d)) * (t1.x(d) - t2.x(d));
-  //Rprintf("e%d,%d: %4.25f ",t1.index(),t2.index(),sqrt(dd));
   return sqrt(dd);
 }
 
 double precomputed_distance(const DataPoint &t1, const DataPoint &t2) {
   double dd = .0;
   dd = t1.x(t2.index());
-  //Rprintf("p%d,%d: %4.25f ",t1.index(),t2.index(),dd);
   return dd;
 }
 
@@ -187,7 +185,7 @@ private:
   }
   
   // Helper function that searches the tree    
-  void search(Node* node, const T& target, int k, std::priority_queue<HeapItem>& heap, double* ptau)
+  void search(Node* node, const T& target, unsigned int k, std::priority_queue<HeapItem>& heap, double* ptau)
   {
     if(node == NULL) return;     // indicates that we're done here
     
