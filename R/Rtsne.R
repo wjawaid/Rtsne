@@ -16,6 +16,7 @@
 #' If \code{X} is a data.frame, it is transformed into a matrix using \code{\link{model.matrix}}. If \code{X} is a \code{\link{dist}} object, it is currently first expanded into a full distance matrix.
 #' 
 #' @param X matrix; Data matrix (each row is an observation, each column is a variable)
+#' @param ... Other arguments that can be passed to Rtsne
 #' @param index integer matrix; Each row contains the identity of the nearest neighbors for each observation 
 #' @param distance numeric matrix; Each row contains the distance to the nearest neighbors in \code{index} for each observation
 #' @param dims integer; Output dimensionality (default: 2)
@@ -27,7 +28,6 @@
 #' @param partial_pca logical; Whether truncated PCA should be used to calculate principal components (requires the irlba package). This is faster for large input matrices (default: FALSE)
 #' @param max_iter integer; Number of iterations (default: 1000)
 #' @param verbose logical; Whether progress updates should be printed (default: global "verbose" option, or FALSE if that is not set)
-#' @param ... Other arguments that can be passed to Rtsne
 #' @param is_distance logical; Indicate whether X is a distance matrix (experimental, default: FALSE)
 #' @param Y_init matrix; Initial locations of the objects. If NULL, random initialization will be used (default: NULL). Note that when using this, the initial stage with exaggerated perplexity values and a larger momentum term will be skipped.
 #' @param pca_center logical; Should data be centered before pca is applied? (default: TRUE)
@@ -40,7 +40,7 @@
 #' @param eta numeric; Learning rate (default: 200.0)
 #' @param exaggeration_factor numeric; Exaggeration factor used to multiply the P matrix in the first part of the optimization (default: 12.0)
 #' @param num_threads integer; Number of threads to use using OpenMP, default 1. 0 corresponds to using all available cores
-#' @param fix logical vector; Indicating which Y_init values to fix. User must define Y_init and set theta = 0 (default: NULL)
+#' @param fix logical vector; Which points to fix in the embedding. Indicating which Y_init values to fix. User must define Y_init and set theta = 0 (default: NULL) 
 #' 
 #' @return List with the following elements:
 #' \item{Y}{Matrix containing the new representations for the objects}
@@ -93,24 +93,24 @@
 #' tsne_out <- Rtsne(dist(normalize_input(iris_matrix)), theta=0.0)
 #' plot(tsne_out$Y,col=iris_unique$Species, asp=1)
 #' 
-#' # Use a given initialization of the locations of the points
-#' tsne_part1 <- Rtsne(iris_unique[,1:4], theta=0.0, pca=FALSE,max_iter=350)
-#' tsne_part2 <- Rtsne(iris_unique[,1:4], theta=0.0, pca=FALSE, max_iter=150,Y_init=tsne_part1$Y)
-#'
-#' # Now see how new points are placed fixing the originals in place
-#' av <- aggregate(iris_matrix, by = list(species=iris_unique$Species), FUN = mean)
-#' f <- c(rep(TRUE, nrow(iris_matrix)), rep(FALSE, 3))
-#' yin <- rbind(tsne_part1$Y, matrix(rep(0,6), nrow = 3))
-#' x <- rbind(iris_matrix, av[,2:5])
-#' y <- Rtsne(x, theta = 0.0, pca = FALSE, Y_init = yin, fix = f)
-#' plot(y$Y, col = c(iris_unique$Species, 3, 1, 2))
-#' na <- nrow(y$Y)
-#' nn <- na - nrow(av) + 1
-#' points(y$Y[nn:na,], col = 1:3, pch = 20)
+#' set.seed(42)
+#' tsne_out <- Rtsne(as.matrix(dist(normalize_input(iris_matrix))),theta=0.0)
+#' plot(tsne_out$Y,col=iris_unique$Species, asp=1)
 #' 
+#' # Supplying starting positions (example: continue from earlier embedding)
+#' set.seed(42)
+#' tsne_part1 <- Rtsne(iris_unique[,1:4], theta=0.0, pca=FALSE, max_iter=350)
+#' tsne_part2 <- Rtsne(iris_unique[,1:4], theta=0.0, pca=FALSE, max_iter=650, Y_init=tsne_part1$Y)
+#' plot(tsne_part2$Y,col=iris_unique$Species, asp=1)
+#' \dontrun{
+#' # Fast PCA and multicore
+#' 
+#' tsne_out <- Rtsne(iris_matrix, theta=0.1, partial_pca = TRUE, initial_dims=3)
+#' tsne_out <- Rtsne(iris_matrix, theta=0.1, num_threads = 2)
+#' }
 #' @useDynLib Rtsne, .registration = TRUE
 #' @import Rcpp
-#' @importFrom stats model.matrix prcomp na.fail
+#' @importFrom stats model.matrix na.fail prcomp
 #' 
 #' @export
 Rtsne <- function (X, ...) {
@@ -122,21 +122,23 @@ Rtsne <- function (X, ...) {
 Rtsne.default <- function(X, dims=2, initial_dims=50, 
                           perplexity=30, theta=0.5, 
                           check_duplicates=TRUE, 
-                          pca=TRUE, partial_pca=FALSE, max_iter=1000,verbose=getOption("verbose", FALSE), 
+                          pca=TRUE, partial_pca=FALSE, max_iter=1000,
+                          verbose=getOption("verbose", FALSE), 
                           is_distance=FALSE, Y_init=NULL, 
                           pca_center=TRUE, pca_scale=FALSE, normalize=TRUE,
                           stop_lying_iter=ifelse(is.null(Y_init),250L,0L), 
                           mom_switch_iter=ifelse(is.null(Y_init),250L,0L), 
                           momentum=0.5, final_momentum=0.8,
-                          eta=200.0, exaggeration_factor=12.0, num_threads=0, fix = NULL, ...) {
+                          eta=200.0, exaggeration_factor=12.0, num_threads=1, fix = NULL, ...) {
   
-  is.wholenumber <- function(x, tol = .Machine$double.eps^0.5)  abs(x - round(x)) < tol
-  
-  if (!is.logical(is_distance)) { stop("is_distance should be a logical variable")}
-  if (!is.matrix(X)) { stop("Input X is not a matrix")}
-  if (is_distance & !(is.matrix(X) & (nrow(X)==ncol(X)))) { stop("Input is not an accepted distance matrix") }
-  if (!(is.logical(pca_center) && is.logical(pca_scale)) ) { stop("pca_center and pca_scale should be TRUE or FALSE")}
-  if (!is.wholenumber(initial_dims) || initial_dims<=0) { stop("Incorrect initial dimensionality.")}
+    if (!is.logical(is_distance)) { stop("is_distance should be a logical variable")}
+    if (!is.matrix(X)) { stop("Input X is not a matrix")}
+    if (is_distance & !(is.matrix(X) & (nrow(X)==ncol(X)))) {
+        stop("Input is not an accepted distance matrix") }
+    if (!(is.logical(pca_center) && is.logical(pca_scale)) ) {
+        stop("pca_center and pca_scale should be TRUE or FALSE")}
+    if (!is.wholenumber(initial_dims) || initial_dims<=0) {
+        stop("Incorrect initial dimensionality.")}
     tsne.args <- .check_tsne_params(nrow(X), dims=dims, perplexity=perplexity, theta=theta,
                                     max_iter=max_iter, verbose=verbose, Y_init=Y_init,
                                     stop_lying_iter=stop_lying_iter,
@@ -146,7 +148,7 @@ Rtsne.default <- function(X, dims=2, initial_dims=50,
  
   # Check for missing values
   X <- na.fail(X)
-  
+
   # Apply PCA
   if (!is_distance) { 
     if (pca) {
@@ -166,19 +168,16 @@ Rtsne.default <- function(X, dims=2, initial_dims=50,
       X <- normalize_input(X)
     }
     X <- t(X) # transposing for rapid column-major access.
-    if (is.null(fix)) fix <- rep(FALSE, nrow(X))
-
-    if (is.null(Y_init)) {
-        init <- FALSE
-        Y_init <- matrix()
   } else {
     # Compute Squared distance if we are using exact TSNE
     if (theta==0.0) {
       X <- X^2
     }
   }
- 
-  out <- do.call(Rtsne_cpp, c(list(X=X, distance_precomputed=is_distance, num_threads=num_threads), tsne.args))
+
+  out <- do.call(Rtsne_cpp, c(list(X=X, distance_precomputed=is_distance,
+                                   num_threads=num_threads),
+                              tsne.args))
   out$Y <- t(out$Y) # Transposing back.
   info <- list(N=ncol(X))
   if (!is_distance) { out$origD <- nrow(X) } # 'origD' is unknown for distance matrices.

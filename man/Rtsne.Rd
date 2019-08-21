@@ -29,7 +29,7 @@ Rtsne_neighbors(index, distance, dims = 2, perplexity = 30,
   FALSE), Y_init = NULL, stop_lying_iter = ifelse(is.null(Y_init),
   250L, 0L), mom_switch_iter = ifelse(is.null(Y_init), 250L, 0L),
   momentum = 0.5, final_momentum = 0.8, eta = 200,
-  exaggeration_factor = 12, num_threads = 1, ...)
+  exaggeration_factor = 12, num_threads = 1, fix = NULL, ...)
 }
 \arguments{
 \item{X}{matrix; Data matrix (each row is an observation, each column is a variable)}
@@ -78,13 +78,11 @@ Rtsne_neighbors(index, distance, dims = 2, perplexity = 30,
 
 \item{num_threads}{integer; Number of threads to use using OpenMP, default 1. 0 corresponds to using all available cores}
 
+\item{fix}{logical vector; Which points to fix in the embedding}
+
 \item{index}{integer matrix; Each row contains the identity of the nearest neighbors for each observation}
 
-\item{distance}{numeric matrix; Each row contains the distance to the
-  nearest neighbors in \code{index} for each observation}
-
-\item{fix}{logical vector; Indicating which Y_init values to fix. User
-  must define Y_init and set theta = 0 (default: NULL)}
+\item{distance}{numeric matrix; Each row contains the distance to the nearest neighbors in \code{index} for each observation}
 }
 \value{
 List with the following elements:

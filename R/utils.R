@@ -51,8 +51,11 @@ is.wholenumber <- function(x, tol = .Machine$double.eps^0.5)
     if (!is.numeric(eta) || eta <= 0) { stop("eta should be a positive number") }
     if (!is.numeric(exaggeration_factor) || exaggeration_factor <= 0) { stop("exaggeration_factor should be a positive number")}
     if (!is.null(fix) && is.null(Y_init)) stop("Cannot fix co-ordinates when no Y_init is given.")
-    if (!is.null(fix) && theta != 0) stop("Use theta=0 when fixing positions.")
+    if (!is.null(fix) && theta != 0) stop("Use theta=0 when fixing positions. Barnes-Hut approximation is not supported")
     if (!is.null(fix) && length(fix) != nrow(Y_init)) stop("Length of fix must equal nrow(Y_init)")
+    if (is.null(fix)) fix <- rep(FALSE, times = nsamples)
+    if (!is.logical(fix)) stop("Fix must be logical vector")
+    
     if (nsamples - 1 < 3 * perplexity) { stop("perplexity is too large for the number of samples")}
 
     init <- !is.null(Y_init)

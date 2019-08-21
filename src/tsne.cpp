@@ -58,11 +58,11 @@ using namespace std;
 template <int NDims>
 TSNE<NDims>::TSNE(double Perplexity, double Theta, bool Verbose, int Max_iter, bool Init,
 		  int Stop_lying_iter, int Mom_switch_iter, double Momentum, double Final_momentum,
-		  double Eta, double Exaggeration_factor, int Num_threads, bool* fix) :
+		  double Eta, double Exaggeration_factor, int Num_threads) :
   perplexity(Perplexity), theta(Theta), momentum(Momentum), final_momentum(Final_momentum),
   eta(Eta), exaggeration_factor(Exaggeration_factor), max_iter(Max_iter),
-  stop_lying_iter(Stop_lying_iter), mom_switch_iter(Mom_switch_iter),
-  num_threads(Num_threads), verbose(Verbose), fix(Fix), init(Init), exact(theta==.0) {
+  stop_lying_iter(Stop_lying_iter), mom_switch_iter(Mom_switch_iter), num_threads(Num_threads),
+  verbose(Verbose), init(Init), exact(theta==.0) {
 
     #ifdef _OPENMP
       int threads = num_threads;
@@ -80,9 +80,17 @@ TSNE<NDims>::TSNE(double Perplexity, double Theta, bool Verbose, int Max_iter, b
 // Perform t-SNE
 template <int NDims>
 void TSNE<NDims>::run(double* X, unsigned int N, int D, double* Y, bool distance_precomputed, double* cost, double* itercost, bool* fix) {
-    if(N - 1 < 3 * perplexity) { Rcpp::stop("Perplexity too large for the number of data points!\n"); }
-    if (verbose) Rprintf("Using no_dims = %d, perplexity = %f, and theta = %f\n", NDims,
-			 perplexity, theta);
+  bool anyfix=false;
+  for (int i = 0; i < N; i++) {
+    if (fix[i]) {
+      anyfix = true;
+      break;
+    }
+  }
+    if(N - 1 < 3 * perplexity) {
+      Rcpp::stop("Perplexity too large for the number of data points!\n"); }
+    if (verbose) Rprintf("Using no_dims = %d, perplexity = %f, and theta = %f\n",
+			 NDims, perplexity, theta);
     if (verbose) Rprintf("Computing input similarities...\n");
     clock_t start = clock();
 
@@ -125,21 +133,25 @@ void TSNE<NDims>::run(double* X, unsigned int N, int D, double* Y, bool distance
 
     if (verbose) {
         clock_t end = clock();
-        if(exact) Rprintf("Done in %4.2f seconds!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC);
-        else Rprintf("Done in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC, (double) row_P[N] / ((double) N * (double) N));
+        if(exact) Rprintf("Done in %4.2f seconds!\nLearning embedding...\n",
+			  (float) (end - start) / CLOCKS_PER_SEC);
+        else Rprintf("Done in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n",
+		     (float) (end - start) / CLOCKS_PER_SEC,
+		     (double) row_P[N] / ((double) N * (double) N));
     }
 
-    trainIterations(N, Y, cost, itercost);
+    trainIterations(N, Y, cost, itercost, fix, anyfix);
     return;
 }
 
 // Perform t-SNE with nearest neighbor results.
 template<int NDims>
-void TSNE<NDims>::run(const int* nn_index, const double* nn_dist, unsigned int N, int K, double* Y, double* cost, double* itercost) {
+void TSNE<NDims>::run(const int* nn_index, const double* nn_dist, unsigned int N, int K, double* Y, double* cost, double* itercost, bool* fix) {
     if(N - 1 < 3 * perplexity) { Rcpp::stop("Perplexity too large for the number of data points!\n"); }
     if (verbose) Rprintf("Using no_dims = %d, perplexity = %f, and theta = %f\n", NDims, perplexity, theta);
     if (verbose) Rprintf("Computing input similarities...\n");
     clock_t start = clock();
+    bool anyfix=false;
 
     // Compute asymmetric pairwise input similarities
     computeGaussianPerplexity(nn_index, nn_dist, N, K);
@@ -152,17 +164,21 @@ void TSNE<NDims>::run(const int* nn_index, const double* nn_dist, unsigned int N
 
     if (verbose) {
         clock_t end = clock();
-        if(exact) Rprintf("Done in %4.2f seconds!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC);
-        else Rprintf("Done in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n", (float) (end - start) / CLOCKS_PER_SEC, (double) row_P[N] / ((double) N * (double) N));
+        if(exact) Rprintf("Done in %4.2f seconds!\nLearning embedding...\n",
+			  (float) (end - start) / CLOCKS_PER_SEC);
+        else Rprintf("Done in %4.2f seconds (sparsity = %f)!\nLearning embedding...\n",
+		     (float) (end - start) / CLOCKS_PER_SEC,
+		     (double) row_P[N] / ((double) N * (double) N));
     }
 
-    trainIterations(N, Y, cost, itercost);
+    trainIterations(N, Y, cost, itercost, fix, anyfix);
     return;
 }
 
 // Perform main training loop
 template<int NDims>
-void TSNE<NDims>::trainIterations(unsigned int N, double* Y, double* cost, double* itercost) {
+void TSNE<NDims>::trainIterations(unsigned int N, double* Y, double* cost, double* itercost,
+				  bool* fix, bool anyfix) {
     // Allocate some memory
     double* dY    = (double*) malloc(N * NDims * sizeof(double));
     double* uY    = (double*) malloc(N * NDims * sizeof(double));
@@ -172,11 +188,13 @@ void TSNE<NDims>::trainIterations(unsigned int N, double* Y, double* cost, doubl
     for(unsigned int i = 0; i < N * NDims; i++) gains[i] = 1.0;
 
     // Lie about the P-values
-    if(exact) { for(unsigned long i = 0; i < (unsigned long)N * N; i++) P[i] *= exaggeration_factor; }
-    else {      for(unsigned long i = 0; i < row_P[N]; i++)    val_P[i] *= exaggeration_factor; }
+    if(exact) {
+      for(unsigned long i = 0; i < (unsigned long)N * N; i++) P[i] *= exaggeration_factor; }
+    else {
+      for(unsigned long i = 0; i < row_P[N]; i++)    val_P[i] *= exaggeration_factor; }
 
-	// Initialize solution (randomly), if not already done
-	if (!init) { for(unsigned int i = 0; i < N * NDims; i++) Y[i] = randn() * .0001; }
+    // Initialize solution (randomly), if not already done
+    if (!init) { for(unsigned int i = 0; i < N * NDims; i++) Y[i] = randn() * .0001; }
 
   clock_t start = clock(), end;
   float total_time=0;
@@ -192,17 +210,8 @@ void TSNE<NDims>::trainIterations(unsigned int N, double* Y, double* cost, doubl
         if(iter == mom_switch_iter) momentum = final_momentum;
 
         // Compute (approximate) gradient
-	  if(exact) computeExactGradient(P.data(), Y, N, NDims, dY, fix);
+        if(exact) computeExactGradient(P.data(), Y, N, NDims, dY, fix, anyfix);
         else computeGradient(P.data(), row_P.data(), col_P.data(), val_P.data(), Y, N, NDims, dY, theta);
-
-	// Zero gradients of fixed points
-	for(int i = 0; i < N; i++) {
-	  if(fix[i]) {
-	    for(int j = 0; j < no_dims; j++){
-	      dY[i * no_dims + j] = 0;
-	    }
-	  }
-	}
 
         // Update gains
         for(unsigned int i = 0; i < N * NDims; i++) gains[i] = (sign_tsne(dY[i]) != sign_tsne(uY[i])) ? (gains[i] + .2) : (gains[i] * .8);
@@ -213,7 +222,7 @@ void TSNE<NDims>::trainIterations(unsigned int N, double* Y, double* cost, doubl
         for(unsigned int i = 0; i < N * NDims; i++)  Y[i] = Y[i] + uY[i];
 
         // Make solution zero-mean
-        zeroMean(Y, N, NDims);
+        if(!anyfix) zeroMean(Y, N, NDims);
 
         // Print out progress
         if((iter > 0 && (iter+1) % 50 == 0) || iter == max_iter - 1) {
@@ -285,7 +294,7 @@ void TSNE<NDims>::computeGradient(double* P, unsigned int* inp_row_P, unsigned i
 // Compute gradient of the t-SNE cost function (exact)
 template <int NDims>
 void TSNE<NDims>::computeExactGradient(double* P, double* Y, unsigned int N, int D, double* dC,
-				       bool* fix) {
+				       bool* fix, bool anyfix) {
 	
 	// Make sure the current gradient contains zeros
 	for(unsigned int i = 0; i < N * D; i++) dC[i] = 0.0;
@@ -310,14 +319,14 @@ void TSNE<NDims>::computeExactGradient(double* P, double* Y, unsigned int N, int
 
 	// Perform the computation of the gradient
 	for(unsigned long n = 0; n < N; n++) {
-    	for(unsigned long m = 0; m < N; m++) {
-            if(n != m) {	// && (fix[m]^fix[n])
-                double mult = (P[n * N + m] - (Q[n * N + m] / sum_Q)) * Q[n * N + m];
-                for(int d = 0; d < D; d++) {
-                    dC[n * D + d] += (Y[n * D + d] - Y[m * D + d]) * mult;
-                }
-            }
-		}
+	  for(unsigned long m = 0; m < N; m++) {
+	    if((n != m) && (!anyfix || (!fix[n] && fix[m]))) {
+	      double mult = (P[n * N + m] - (Q[n * N + m] / sum_Q)) * Q[n * N + m];
+	      for(int d = 0; d < D; d++) {
+		dC[n * D + d] += (Y[n * D + d] - Y[m * D + d]) * mult;
+	      }
+	    }
+	  }
 	}
 
     // Free memory
